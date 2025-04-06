@@ -37,8 +37,3 @@ This is the backend server built with **Node.js**, **Express**, and **MongoDB**.
 
 ---
 
-**Short, clean, and looks good! 🚀**
-
-You can just copy-paste it as your `README.md`.  
-Would you also like a *"future todo"* section for when you add expense management? (optional) ✅✨  
-I can add that too if you want!
