@@ -153,4 +153,47 @@ const leaveGroup = async (req, res) => {
   }
 };
 
-module.exports = { createGroup, addMember, removeMember, leaveGroup };
+const getUserGroups = async (req, res) => {
+  try {
+    const db = getDB();
+    const groupCollection = db.collection("groups");
+    const userId = req.user.id;
+
+    const groups = await groupCollection.find({ members: userId }).toArray();
+
+    res.status(200).json(groups);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+const getGroupBalances = async (req, res) => {
+  try {
+    const db = getDB();
+    const groupCollection = db.collection("groups");
+
+    const { groupId } = req.query;
+    const userId = req.user.id;
+
+    let objectGroupId;
+    try {
+      objectGroupId = new ObjectId(groupId);
+    } catch {
+      return res.status(400).json({ message: "Invalid Group ID format" });
+    }
+
+    const group = await groupCollection.findOne({ _id: objectGroupId });
+
+    if (!group) return res.status(404).json({ message: "Group not found" });
+
+    if (!group.members.includes(userId)) {
+      return res.status(403).json({ message: "You are not a member of this group" });
+    }
+
+    const balances = group.balances || {};
+    res.status(200).json({ balances });
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+module.exports = { createGroup, addMember, removeMember, leaveGroup, getUserGroups, getGroupBalances };

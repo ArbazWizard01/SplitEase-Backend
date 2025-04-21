@@ -3,7 +3,8 @@ require("dotenv");
 const cors = require("cors");
 const { connectDB } = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
-const groupRoutes = require('./routes/groupRoutes')
+const groupRoutes = require("./routes/groupRoutes");
+const expeneRoutes = require("./routes/expenseRoutes");
 
 const app = express();
 
@@ -11,7 +12,8 @@ app.use(express.json());
 app.use(cors());
 
 app.use("/auth", authRoutes);
-app.use('/group', groupRoutes);
+app.use("/group", groupRoutes);
+app.use("/expense", expeneRoutes);
 
 app.get("/", (req, res) => {
   res.send("Hello arbaz");
