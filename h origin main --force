@@ -1,0 +1,5 @@
+[33m1930176[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Merge branch 'main' of https://github.com/ArbazWizard01/SplitEase-Backend
+[33m07fe8ea[m Add Expense and Group controllers with API endpoints
+[33m6d52437[m Update README.md
+[33m4a9f12f[m Create README.md
+[33mecdabf9[m feat: complete authentication and group management

@@ -52,15 +52,17 @@ const addMember = async (req, res) => {
     const { email } = req.body;
     const requesterId = req.user.id;
 
-    if (!ObjectId.isValid(groupId)) {
+    let objectGroupId;
+    try {
+      objectGroupId = new ObjectId(groupId);
+    } catch {
       return res.status(400).json({ message: "Invalid Group ID format" });
     }
-    const groupObjectId = new ObjectId(groupId);
 
     const userToAdd = await usersCollection.findOne({ email });
     if (!userToAdd) return res.status(404).json({ message: "User not found" });
 
-    const group = await groupCollection.findOne({ _id: groupObjectId });
+    const group = await groupCollection.findOne({ _id: objectGroupId });
     if (!group) return res.status(404).json({ message: "Group not found" });
 
     if (!group.members.includes(requesterId))
@@ -72,7 +74,7 @@ const addMember = async (req, res) => {
       return res.status(400).json({ message: "User is already in the group" });
 
     await groupCollection.updateOne(
-      { _id: groupObjectId },
+      { _id: objectGroupId },
       { $push: { members: userToAdd._id.toString() } }
     );
 
@@ -187,7 +189,9 @@ const getGroupBalances = async (req, res) => {
     if (!group) return res.status(404).json({ message: "Group not found" });
 
     if (!group.members.includes(userId)) {
-      return res.status(403).json({ message: "You are not a member of this group" });
+      return res
+        .status(403)
+        .json({ message: "You are not a member of this group" });
     }
 
     const balances = group.balances || {};
@@ -196,4 +200,11 @@ const getGroupBalances = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
-module.exports = { createGroup, addMember, removeMember, leaveGroup, getUserGroups, getGroupBalances };
+module.exports = {
+  createGroup,
+  addMember,
+  removeMember,
+  leaveGroup,
+  getUserGroups,
+  getGroupBalances,
+};
