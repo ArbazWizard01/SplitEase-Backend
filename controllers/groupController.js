@@ -200,6 +200,48 @@ const getGroupBalances = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
+
+const getGroupById = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    if (!groupId) {
+      return res.status(400).json({ message: "Group Id is missing" });
+    }
+
+    const db = getDB();
+    const groupCollection = db.collection("groups");
+    const usersCollection = db.collection("users");
+
+    const group = await groupCollection.findOne({
+      _id: new ObjectId(groupId),
+    });
+
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+
+    // Fetch member details
+    const members = await usersCollection
+      .find({ _id: { $in: group.members.map(id => new ObjectId(id)) } })
+      .project({ name: 1 })
+      .toArray();
+
+    const memberMap = {};
+    members.forEach(member => {
+      memberMap[member._id.toString()] = member.name;
+    });
+
+    return res.status(200).json({
+      ...group,
+      memberDetails: memberMap, 
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+
 module.exports = {
   createGroup,
   addMember,
@@ -207,4 +249,5 @@ module.exports = {
   leaveGroup,
   getUserGroups,
   getGroupBalances,
+  getGroupById,
 };
