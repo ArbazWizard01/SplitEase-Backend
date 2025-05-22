@@ -1,5 +1,6 @@
 const { getDB } = require("../config/db");
 const { ObjectId } = require("mongodb");
+const categorizeExpense = require("../utils/categorizeExpense");
 
 const recalculateBalances = async (groupId) => {
   const db = getDB();
@@ -40,6 +41,14 @@ const addExpense = async (req, res) => {
     const expenseCollection = db.collection("expenses");
     const { groupId } = req.params;
     const { amount, description, splitBetween } = req.body;
+    let category = "Miscellaneous"; // default
+    try {
+      category = await categorizeExpense(description);
+      console.log("Category: ", category);
+    } catch (err) {
+      console.error("Categorization failed:", err.message);
+    }
+
     const paidBy = req.user.id;
 
     if (!amount || !groupId || !splitBetween || !Array.isArray(splitBetween)) {
@@ -60,6 +69,7 @@ const addExpense = async (req, res) => {
     const expense = {
       amount,
       description,
+      category,
       groupId,
       paidBy,
       splitBetween: splitBetweenIds,
@@ -92,7 +102,9 @@ const getAllExpenses = async (req, res) => {
 
     res.status(200).json(expenses);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch expenses", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch expenses", error: error.message });
   }
 };
 
@@ -101,12 +113,16 @@ const getExpenseById = async (req, res) => {
     const db = getDB();
     const { expenseId } = req.params;
 
-    const expense = await db.collection("expenses").findOne({ _id: new ObjectId(expenseId) });
+    const expense = await db
+      .collection("expenses")
+      .findOne({ _id: new ObjectId(expenseId) });
     if (!expense) return res.status(404).json({ message: "Expense not found" });
 
     res.status(200).json(expense);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching expense", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error fetching expense", error: error.message });
   }
 };
 
@@ -116,17 +132,49 @@ const updateExpense = async (req, res) => {
     const { expenseId } = req.params;
     const updateData = req.body;
 
-    await db.collection("expenses").updateOne(
-      { _id: new ObjectId(expenseId) },
-      { $set: updateData }
-    );
+    // Fetch the existing expense
+    const existingExpense = await db
+      .collection("expenses")
+      .findOne({ _id: new ObjectId(expenseId) });
 
-    const updatedExpense = await db.collection("expenses").findOne({ _id: new ObjectId(expenseId) });
+    if (!existingExpense) {
+      return res.status(404).json({ message: "Expense not found" });
+    }
+
+    // Check if the description has changed, and re-categorize if necessary
+    if (
+      updateData.description &&
+      updateData.description !== existingExpense.description
+    ) {
+      try {
+        updateData.category = await categorizeExpense(updateData.description);
+      } catch (err) {
+        console.error("Categorization failed:", err.message);
+        updateData.category = existingExpense.category; // fallback to old category
+      }
+    }
+
+    // Update the expense in the database
+    await db
+      .collection("expenses")
+      .updateOne({ _id: new ObjectId(expenseId) }, { $set: updateData });
+
+    const updatedExpense = await db
+      .collection("expenses")
+      .findOne({ _id: new ObjectId(expenseId) });
+
+    // Recalculate balances after updating
     await recalculateBalances(updatedExpense.groupId);
 
-    res.status(200).json({ message: "Expense updated and balances recalculated" });
+    res.status(200).json({
+      message:
+        "Expense updated, category re-evaluated, and balances recalculated",
+      updatedExpense,
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error updating expense", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error updating expense", error: error.message });
   }
 };
 
@@ -135,16 +183,22 @@ const deleteExpense = async (req, res) => {
     const db = getDB();
     const { expenseId } = req.params;
 
-    const expense = await db.collection("expenses").findOne({ _id: new ObjectId(expenseId) });
+    const expense = await db
+      .collection("expenses")
+      .findOne({ _id: new ObjectId(expenseId) });
     if (!expense) return res.status(404).json({ message: "Expense not found" });
 
     await db.collection("expenses").deleteOne({ _id: new ObjectId(expenseId) });
 
     await recalculateBalances(expense.groupId);
 
-    res.status(200).json({ message: "Expense deleted and balances recalculated" });
+    res
+      .status(200)
+      .json({ message: "Expense deleted and balances recalculated" });
   } catch (error) {
-    res.status(500).json({ message: "Error deleting expense", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error deleting expense", error: error.message });
   }
 };
 
@@ -154,14 +208,19 @@ const getUserExpensesInProject = async (req, res) => {
     const { groupId } = req.params;
     const userId = req.user.id;
 
-    const expenses = await db.collection("expenses").find({
-      groupId,
-      splitBetween: userId
-    }).toArray();
+    const expenses = await db
+      .collection("expenses")
+      .find({
+        groupId,
+        splitBetween: userId,
+      })
+      .toArray();
 
     res.status(200).json(expenses);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch user expenses", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch user expenses", error: error.message });
   }
 };
 
@@ -169,13 +228,17 @@ const getSplitSummary = async (req, res) => {
   try {
     const db = getDB();
     const { groupId } = req.params;
-    const group = await db.collection("groups").findOne({ _id: new ObjectId(groupId) });
+    const group = await db
+      .collection("groups")
+      .findOne({ _id: new ObjectId(groupId) });
 
     if (!group) return res.status(404).json({ message: "Group not found" });
 
     res.status(200).json(group.balances || {});
   } catch (error) {
-    res.status(500).json({ message: "Error fetching split summary", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error fetching split summary", error: error.message });
   }
 };
 
@@ -186,5 +249,6 @@ module.exports = {
   updateExpense,
   deleteExpense,
   getUserExpensesInProject,
-  getSplitSummary
+  getSplitSummary,
+  recalculateBalances,
 };

@@ -1,5 +1,6 @@
 const { getDB } = require("../config/db");
 const { ObjectId } = require("mongodb");
+const { recalculateBalances } = require("./expenseController");
 
 const createGroup = async (req, res) => {
   try {
@@ -99,8 +100,14 @@ const removeMember = async (req, res) => {
     const groupObjectId = new ObjectId(groupId);
 
     const userToRemove = await usersCollection.findOne({ email });
-    if (!userToRemove)
+    if (!userToRemove) {
       return res.status(404).json({ message: "User not found" });
+    }
+    if (userToRemove._id.toString() === requesterId) {
+      return res
+        .status(400)
+        .json({ message: "You cannot remove yourself from the group" });
+    }
 
     const group = await groupCollection.findOne({ _id: groupObjectId });
     if (!group) return res.status(404).json({ message: "Group not found" });
@@ -114,6 +121,8 @@ const removeMember = async (req, res) => {
       { _id: groupObjectId },
       { $pull: { members: userToRemove._id.toString() } }
     );
+
+    await recalculateBalances(groupId);
     res.status(200).json({ message: "User removed to group successfully" });
   } catch (error) {
     res.status(500).json({ message: "Server Error", error: error.message });
@@ -144,10 +153,21 @@ const leaveGroup = async (req, res) => {
         .json({ message: "You are not a member of this group" });
     }
 
+    if (group.createdBy === userId && group.members.length > 1) {
+      return res.status(400).json({
+        message:
+          "Group creator cannot leave the group unless no other members exist",
+      });
+    }
+
+    // Just remove from group.members
     await groupsCollection.updateOne(
       { _id: objectGroupId },
       { $pull: { members: userId } }
     );
+
+    // No need to remove from any expense documents
+    await recalculateBalances(groupId);
 
     res.status(200).json({ message: "You have left the group successfully" });
   } catch (error) {
@@ -222,25 +242,23 @@ const getGroupById = async (req, res) => {
 
     // Fetch member details
     const members = await usersCollection
-      .find({ _id: { $in: group.members.map(id => new ObjectId(id)) } })
+      .find({ _id: { $in: group.members.map((id) => new ObjectId(id)) } })
       .project({ name: 1 })
       .toArray();
 
     const memberMap = {};
-    members.forEach(member => {
+    members.forEach((member) => {
       memberMap[member._id.toString()] = member.name;
     });
 
     return res.status(200).json({
       ...group,
-      memberDetails: memberMap, 
+      memberDetails: memberMap,
     });
-
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
 
 module.exports = {
   createGroup,
